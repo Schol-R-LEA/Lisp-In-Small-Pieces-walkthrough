@@ -14,7 +14,7 @@
           ((begin) (eprogn (cdr expr) env))
           ((set!) (update! (cadr expr) env (basic:eval (caddr expr) env)))
           ((lambda) (make-function (cadr expr) (cddr expr) env))
-          (else (basic:apply (basic:eval (cdr expr) env)
+          (else (invoke (basic:eval (cdr expr) env)
                              (evlis (cdr expr) env)))))))
 
 ;;; utility functions
@@ -35,12 +35,18 @@
             (basic:eval (car exprs) env))
         empty-result)))
 
+(define evlis
+  (if (pair? exprs)
+      (cons (basic:eval (car exps) env)
+            evlis (cdr exps) env)
+      '()))
+
 ;;; simple REPL
 
 (define basic:repl
   (lambda ()
     (display "Basic evaluator test REPL")
-    (let loop ((lexical-env '((parent ()))))
+    (let loop ((env '((parent ()))))
       (display #\newline)
       (display #\newline)
       (display ">>> ")
