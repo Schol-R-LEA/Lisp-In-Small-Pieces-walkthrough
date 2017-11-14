@@ -1,9 +1,11 @@
 (define basic:eval
   (lambda (expr env)
     (if (atom? expr)
-        
-        (case (car expr)
-          (else (error "EVAL - could not evaluate list"))))))
+        (if (symbol? expr)
+            (lookup expr env)
+            expr))
+    (case (car expr)
+          (else (error "EVAL - could not evaluate list")))))
 
   
 (define atom?
