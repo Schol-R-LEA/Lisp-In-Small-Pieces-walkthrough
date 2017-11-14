@@ -1,17 +1,23 @@
 (define basic:eval
   (lambda (expr env)
     (if (atom? expr)
-        (if (symbol? expr)
-            (lookup expr env)
-            expr))
-    (case (car expr)
-          (else (error "EVAL - could not evaluate list")))))
+        (cond ((symbol? expr)
+               (lookup expr env))
+              ((or (number? expr) (string? expr) (char? expr) (boolean? expr) (vector? expr))
+               expr)
+              (else (error "EVAL - cannot evaluate atom")))
+        (case (car expr)
+          (else (error "EVAL - could not evaluate list"))))))
 
+;;; utility functions
   
 (define atom?
   (lambda (expr)
     (not (pair? expr))))
-  
+
+
+;;; simple REPL
+
 (define basic:repl
   (lambda ()
     (display "Basic evaluator test REPL")
@@ -22,3 +28,5 @@
       (let ((result (basic:eval (read) env)))
         (display result)
         (loop env)))))
+
+(basic:repl)
