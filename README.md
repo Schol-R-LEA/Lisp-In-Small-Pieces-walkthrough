@@ -1,0 +1,1 @@
+This is an example-by-example walkthrough of Christien Quinniec's 1996 textbook _Lisp In Small Pieces_, which I am using to review the techniques for imlementing innterpreters and compilers for Lisp family languagaes. The book focuses primarily in Scheme variants, but does discuss the design decisions of other languages in the family, especially Common Lisp and LeLisp.
