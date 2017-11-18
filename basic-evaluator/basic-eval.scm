@@ -24,6 +24,10 @@
         (error "not a function: " fn))))
 
 
+(define make-function
+  (lambda (variables body env)
+    (eprogn body (extend-env env.init variables values))))
+
 ;;; utility functions
 
 (define atom?
