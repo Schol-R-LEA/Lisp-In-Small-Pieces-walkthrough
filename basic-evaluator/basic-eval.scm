@@ -2,45 +2,52 @@
 (define env.init  '())
 (define env.global env.init)
 (define parent-env '**parent**)
-
+(define the-false-value '**false**)
+(define the-null-value '**null**)
 
 (define-syntax define-initial
-  (syntax-rules (:in)
-    ((_ <name> <value> :in <env>)
-     (begin
-       (set! <env> (cons (cons '<name> <value>) <env>))
-       '<name>))
-    ((_ <name> <value>)
-     (define-initial <name> <value> :in env.global))
-    ((_ <name> in <env>)
-     (define-initial <name> void :in <env>))
-    ((_ <name>)
-     (define-initial <name> void :in env.global))))
+  (lambda (macro)
+    (syntax-case macro (in)
+      ((_ <name> <value> in <env>)
+       (identifier? #'<name>) 
+       #`(begin
+           (set! <env> (cons (cons '<name> <value>) <env>))
+           '<name>))
+      ((_ <name> <value>)
+       #`(define-initial <name> <value> in env.global))
+      ((_ <name> in <env>)
+       #`(define-initial <name> void in <env>))
+      ((_ <name>)
+       #`(define-initial <name> void in env.global)))))
 
 
 (define-syntax define-primitive
-  (syntax-rules (:in)
-    ((_ <name> <primitive> <arity> :in <env>)
-     (define-initial <name>
-       (lambda (values)
-         (if (= <arity> (length values))
-             (apply <primitive> values)
-             (error (format #t
-                            "PROCEDURE-APPLICATION: Incorrect arity for procedure ~A, expected ~A, recieved ~A"                               <name>
-                            <arity>
-                            (length values))))
-         :in <env>)))
-    ((_ <name> <primitive> <arity>)
-     (define-primitive <name> <primitive> <arity> :in env.global))
-    ((_ <name> <arity> :in <env>)
-     (define-primitive <name> <name> <arity> :in <env>))
-    ((_ <name> <arity>)
-     (define-primitive <name> <name> <arity> :in env.global))))
+  (lambda (macro)
+    (syntax-case macro (in)
+      ((_ <name> <primitive> <arity> in <env>)
+       (symbol? #'name)
+       #`(define-initial '<name>
+           (lambda (values)
+             (if (= <arity> (length values))
+                 (apply <primitive> values)
+                 (error (format #t
+                                "PROCEDURE-APPLICATION: Incorrect arity for fn ~A, expected ~A, got ~A"
+                                <name>
+                                <arity>
+                                (length values))))
+             in <env>)))
+      ((_ <name> <primitive> <arity>)
+       (symbol? #'<name>)
+       #`(define-primitive <name> <primitive> <arity> in env.global))
+      ((_ <primitive> <arity> in <env>)
+         #`(define-primitive '#,@<primitive> <primitive> <arity> in <env>))
+      ((_ <primitive> <arity>)
+         #`(define-primitive <primitive> <arity> in env.global)))))
   
 
 (define-initial t #t)
-(define-initial f #f)
-(define-initial nil '())
+(define-initial f the-false-value)
+(define-initial nil the-null-value)
 
 ;; list creation primitives
 (define-primitive cons 2)
@@ -121,9 +128,14 @@
   (lambda (expr env)
     (if (atom? expr)
         (cond ((symbol? expr)
-               (lookup expr env))
+               (let ((value (lookup-env expr env)))
+                 (if value
+                     value
+                     (error "No bound value for " expr))))
               ((or (number? expr) (string? expr) (char? expr) (boolean? expr) (vector? expr))
                expr)
+              ((eq? expr the-null-value)
+               '())
               (else (error "EVAL - cannot evaluate atom")))
         (case (car expr)
           ((quote) (cadr expr))
@@ -162,7 +174,7 @@
               (basic:eval (car exprs) env)
               (eprogn (cdr exprs) env))
             (basic:eval (car exprs) env))
-        empty-result)))
+        void)))
 
 
 (define evlis
@@ -183,23 +195,45 @@
     (not (null? value))))
 
 
+(define match
+  (lambda (entry key)
+    (if (eq? (car entry) key)
+        (cdr entry)
+        #f)))
+
 (define lookup-env
   (lambda (key env)
-    (if (pair? env)
-        (if (eq? (caar env) key)
-            (cdar env)
-            (lookup-env key (cadr env)))
-        (error "LOOKUP - no value bound to symbol " key))))
+    (if (symbol? key)
+        (if (pair? env)
+            (let lookup-loop ((entry (car env))
+                              (entries (cdr env)))
+              (cond ((null? entry)
+                     #f)
+                    ((pair? entry)
+                     (let ((key-candidate (car entry))
+                           (value-candidate (cdr entry)))
+                       (cond ((eq? key key-candidate)
+                              value-candidate)
+                             ((pair? key-candidate)
+                              (let ((result-candidate
+                                     (lookup-loop (car key-candidate) (cdr key-candidate))))
+                                (if result-candidate
+                                    result-candidate
+                                    (if (pair? entries) 
+                                        (lookup-loop (car entries) (cdr entries))
+                                        #f))))
+                             (else #f))))
+                    (else #f)))
+            (error "LOOKUP - malformed environment" env))
+        (error "LOOKUP - malformed key"))))
 
-         
 (define update-env!
   (lambda (key env value)
-    (let ((variable (lookup key env)))
+    (let ((variable (lookup-env key env)))
       (if (valid? variable)
           (begin
             (set-cdr! variable value)
-            empty-result))))))
-
+            void)))))
 
 (define extend-env
   (lambda (env variables values)
@@ -207,15 +241,17 @@
            (if (pair? values)
                (cons (cons (car variables) (car values))
                      (extend-env env (cdr variables) (cdr values)))
-               (error "Too few values"))
-           ((null? variables)
-            (if (null? values)
-                env
-                (error "Too few variables")))
-           ((symbol? variables)
-            (cons (cons variables values) env))))))
+               (error "Too few values")))
+          ((null? variables)
+           (if (null? values)
+               env
+               (error "Too few variables")))
+          ((symbol? variables)
+           (cons (cons variables values) env))
+          (else (error "EXTEND - variable key must be a symbol")))))
 
 ;;; simple REPL
+
 
 (define basic:repl
   (lambda ()
