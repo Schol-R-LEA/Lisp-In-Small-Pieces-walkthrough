@@ -10,6 +10,7 @@
   (lambda (macro)
     (syntax-case macro (in)
       ((_ <name> <value> in <env>)
+       (identifier? #'<name>) 
        #`(begin
            (set! <env> (cons (cons '<name> <value>) <env>))
            '<name>))
@@ -25,24 +26,25 @@
   (lambda (macro)
     (syntax-case macro (in)
       ((_ <name> <primitive> <arity> in <env>)
-       #`(define-initial <name>
+       (symbol? #'name)
+       #`(define-initial '<name>
            (lambda (values)
              (if (= <arity> (length values))
                  (apply <primitive> values)
-                 (begin 
-                   (display "PROCEDURE-APPLICATION: Incorrect arity for fn")
-                   (display <name>)
-                   (display ": expect ")
-                   (display <arity>)
-                   (display ", got ")
-                   (display (length values)))))
-           in <env>))
+                 (error (format #t
+                                "PROCEDURE-APPLICATION: Incorrect arity for fn ~A, expected ~A, got ~A"
+                                <name>
+                                <arity>
+                                (length values))))
+             in <env>)))
       ((_ <name> <primitive> <arity>)
-       #`(define-primitive <name> <primitive> <arity> in env.global)))
-      ((_ <primitive-name> <arity> in <env>)
-       #`(define-primitive <primitive-name> <primitive-name> <arity> in <env>))
-      ((_ <primitive-name> <arity>)
-       #`(define-primitive <primitive-name> <arity> in env.global))))
+       (symbol? #'<name>)
+       #`(define-primitive <name> <primitive> <arity> in env.global))
+      ((_ <primitive> <arity> in <env>)
+         #`(define-primitive '#,@<primitive> <primitive> <arity> in <env>))
+      ((_ <primitive> <arity>)
+         #`(define-primitive <primitive> <arity> in env.global)))))
+  
 
 (define-initial t #t)
 (define-initial f the-false-value)
@@ -130,12 +132,12 @@
                (let ((value (lookup-env expr env)))
                  (if value
                      value
-                     (display "No bound value for " expr))))
+                     (error "No bound value for " expr))))
               ((or (number? expr) (string? expr) (char? expr) (boolean? expr) (vector? expr))
                expr)
               ((eq? expr the-null-value)
                '())
-              (else (display "EVAL - cannot evaluate atom")))
+              (else (error "EVAL - cannot evaluate atom")))
         (case (car expr)
           ((quote) (cadr expr))
           ((if) (if (basic:eval (cadr expr) env)
@@ -146,7 +148,6 @@
           ((lambda) (make-function (cadr expr) (cddr expr) env))
           (else (invoke (basic:eval (car expr) env)
                         (evlis (cdr expr) env)))))))
-
 
 (define invoke
   (lambda (fn args) 
@@ -205,28 +206,25 @@
   (lambda (key env)
     (if (symbol? key)
         (if (pair? env)
-            (let lookup-loop 
-                ((entry (car env))
-                 (entries (cdr env)))
-              (cond 
-               ((null? entry) #f)
-               ((pair? entry)
-                (let ((key-candidate (car entry))
-                      (value-candidate (cdr entry)))
-                  (cond 
-                   ((eq? key key-candidate) value-candidate)
-                   ((pair? key-candidate)
-                    (let ((result-candidate
-                           (lookup-loop (car key-candidate) (cdr key-candidate))))
-                      (if result-candidate
-                          result-candidate
-                          (lookup-loop (car entries) (cdr entries)
-                                       (if (pair? entries)
-                                           (lookup-loop (car entries) (cdr entries))
-                                           #f)))))
-                   ((pair? entries) (lookup-loop (car entries) (cdr entries)))
-                   (else #f))))
-               (else #f)))
+            (let lookup-loop ((entry (car env))
+                              (entries (cdr env)))
+              (cond ((null? entry)
+                     #f)
+                    ((pair? entry)
+                     (let ((key-candidate (car entry))
+                           (value-candidate (cdr entry)))
+                       (cond ((eq? key key-candidate)
+                              value-candidate)
+                             ((pair? key-candidate)
+                              (let ((result-candidate
+                                     (lookup-loop (car key-candidate) (cdr key-candidate))))
+                                (if result-candidate
+                                    result-candidate
+                                    (if (pair? entries) 
+                                        (lookup-loop (car entries) (cdr entries))
+                                        #f))))
+                             (else #f))))
+                    (else #f)))
             (error "LOOKUP - malformed environment" env))
         (error "LOOKUP - malformed key"))))
 
@@ -254,7 +252,6 @@
           (else (error "EXTEND - variable key must be a symbol")))))
 
 ;;; simple REPL
-
 
 
 (define basic:repl
