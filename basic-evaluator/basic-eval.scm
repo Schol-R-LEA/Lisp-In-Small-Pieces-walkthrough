@@ -38,11 +38,11 @@
                    (display (length values)))))
            in <env>))
       ((_ <name> <primitive> <arity>)
-       #`(define-primitive <name> <primitive> <arity> in env.global)))
+       #`(define-primitive <name> <primitive> <arity> in env.global))
       ((_ <primitive-name> <arity> in <env>)
        #`(define-primitive <primitive-name> <primitive-name> <arity> in <env>))
       ((_ <primitive-name> <arity>)
-       #`(define-primitive <primitive-name> <arity> in env.global))))
+       #`(define-primitive <primitive-name> <arity> in env.global)))))
 
 (define-initial t #t)
 (define-initial f the-false-value)
@@ -70,10 +70,8 @@
 (define-primitive > 2)
 (define-primitive >= 2)
 (define-primitive not 1)
-                                        ;(define-primitive and 2)
-                                        ;(define-primitive or 2)
-
-
+;; (define-primitive and 2)
+;; (define-primitive or 2)
 
 ;; basic predicates
 (define-primitive null? 1)
@@ -230,6 +228,7 @@
             (error "LOOKUP - malformed environment" env))
         (error "LOOKUP - malformed key"))))
 
+
 (define update-env!
   (lambda (key env value)
     (let ((variable (lookup-env key env)))
@@ -237,6 +236,7 @@
           (begin
             (set-cdr! variable value)
             void)))))
+
 
 (define extend-env
   (lambda (env variables values)
@@ -260,7 +260,7 @@
 (define basic:repl
   (lambda ()
     (display "Basic evaluator test REPL")
-    (let loop ((env env.init))
+    (let loop ((env env.global))
       (display #\newline)
       (display #\newline)
       (display ">>> ")
