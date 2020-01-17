@@ -10,6 +10,7 @@
   (lambda (macro)
     (syntax-case macro (in)
       ((_ <name> <value> in <env>)
+       (identifier? #'<name>)        
        #`(begin
            (set! <env> (cons (cons '<name> <value>) <env>))
            '<name>))
@@ -128,12 +129,12 @@
                (let ((value (lookup-env expr env)))
                  (if value
                      value
-                     (display "No bound value for " expr))))
+                     (error "No bound value for " expr))))
               ((or (number? expr) (string? expr) (char? expr) (boolean? expr) (vector? expr))
                expr)
               ((eq? expr the-null-value)
                '())
-              (else (display "EVAL - cannot evaluate atom")))
+              (else (error "EVAL - cannot evaluate atom" expr)))
         (case (car expr)
           ((quote) (cadr expr))
           ((if) (if (basic:eval (cadr expr) env)
@@ -218,15 +219,15 @@
                            (lookup-loop (car key-candidate) (cdr key-candidate))))
                       (if result-candidate
                           result-candidate
-                          (lookup-loop (car entries) (cdr entries)
-                                       (if (pair? entries)
-                                           (lookup-loop (car entries) (cdr entries))
-                                           #f)))))
+                          (lookup-loop (car entries) (cdr entries)))
+                      (if (pair? entries)
+                          (lookup-loop (car entries) (cdr entries))
+                          #f)))
                    ((pair? entries) (lookup-loop (car entries) (cdr entries)))
                    (else #f))))
                (else #f)))
             (error "LOOKUP - malformed environment" env))
-        (error "LOOKUP - malformed key"))))
+        (error "LOOKUP - malformed key" key))))
 
 
 (define update-env!
@@ -244,14 +245,14 @@
            (if (pair? values)
                (cons (cons (car variables) (car values))
                      (extend-env env (cdr variables) (cdr values)))
-               (error "Too few values")))
+               (error "Too few values" values)))
           ((null? variables)
            (if (null? values)
                env
-               (error "Too few variables")))
+               (error "Too few variables" variables)))
           ((symbol? variables)
            (cons (cons variables values) env))
-          (else (error "EXTEND - variable key must be a symbol")))))
+          (else (error "EXTEND - variable key must be a symbol" variables)))))
 
 ;;; simple REPL
 

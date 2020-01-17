@@ -26,8 +26,7 @@
   (lambda (macro)
     (syntax-case macro (in)
       ((_ <name> <primitive> <arity> in <env>)
-       (symbol? #'name)
-       #`(define-initial '<name>
+       #`(define-initial <name>
            (lambda (values)
              (if (= <arity> (length values))
                  (apply <primitive> values)
@@ -35,15 +34,14 @@
                                 "PROCEDURE-APPLICATION: Incorrect arity for fn ~A, expected ~A, got ~A"
                                 <name>
                                 <arity>
-                                (length values))))
-             in <env>)))
+                                (length values)))))
+           in <env>))
       ((_ <name> <primitive> <arity>)
-       (symbol? #'<name>)
        #`(define-primitive <name> <primitive> <arity> in env.global))
-      ((_ <primitive> <arity> in <env>)
-         #`(define-primitive '#,@<primitive> <primitive> <arity> in <env>))
-      ((_ <primitive> <arity>)
-         #`(define-primitive <primitive> <arity> in env.global)))))
+      ((_ <primitive-name> <arity> in <env>)
+         #`(define-primitive <primitive-name> <primitive-name> <arity> in <env>))
+      ((_ <primitive-name> <arity>)
+         #`(define-primitive <primitive-name> <arity> in env.global)))))
   
 
 (define-initial t #t)
@@ -132,7 +130,7 @@
                (let ((value (lookup-env expr env)))
                  (if value
                      value
-                     (error "No bound value for " expr))))
+                     (error "No bound value for" expr))))
               ((or (number? expr) (string? expr) (char? expr) (boolean? expr) (vector? expr))
                expr)
               ((eq? expr the-null-value)
@@ -153,7 +151,7 @@
   (lambda (fn args) 
     (if (procedure? fn)
         (fn args)
-        (error "not a function: " fn))))
+        (error "not a function:" fn))))
 
 (define make-function
   (lambda (variables body env)
@@ -202,31 +200,35 @@
         (cdr entry)
         #f)))
 
+
 (define lookup-env
   (lambda (key env)
     (if (symbol? key)
         (if (pair? env)
-            (let lookup-loop ((entry (car env))
-                              (entries (cdr env)))
-              (cond ((null? entry)
-                     #f)
-                    ((pair? entry)
-                     (let ((key-candidate (car entry))
-                           (value-candidate (cdr entry)))
-                       (cond ((eq? key key-candidate)
-                              value-candidate)
-                             ((pair? key-candidate)
-                              (let ((result-candidate
-                                     (lookup-loop (car key-candidate) (cdr key-candidate))))
-                                (if result-candidate
-                                    result-candidate
-                                    (if (pair? entries) 
-                                        (lookup-loop (car entries) (cdr entries))
-                                        #f))))
-                             (else #f))))
-                    (else #f)))
+            (let lookup-loop 
+                ((entry (car env))
+                 (entries (cdr env)))
+              (cond 
+               ((null? entry) #f)
+               ((pair? entry)
+                (let ((key-candidate (car entry))
+                      (value-candidate (cdr entry)))
+                  (cond 
+                   ((eq? key key-candidate) value-candidate)
+                   ((pair? key-candidate)
+                    (let ((result-candidate
+                           (lookup-loop (car key-candidate) (cdr key-candidate))))
+                      (if result-candidate
+                          result-candidate
+                          (lookup-loop (car entries) (cdr entries)))
+                      (if (pair? entries)
+                          (lookup-loop (car entries) (cdr entries))
+                          #f)))
+                   ((pair? entries) (lookup-loop (car entries) (cdr entries)))
+                   (else #f))))
+               (else #f)))
             (error "LOOKUP - malformed environment" env))
-        (error "LOOKUP - malformed key"))))
+        (error "LOOKUP - malformed key" key))))
 
 (define update-env!
   (lambda (key env value)
@@ -257,7 +259,7 @@
 (define basic:repl
   (lambda ()
     (display "Basic evaluator test REPL")
-    (let loop ((env env.init))
+    (let loop ((env env.global))
       (display #\newline)
       (display #\newline)
       (display ">>> ")
