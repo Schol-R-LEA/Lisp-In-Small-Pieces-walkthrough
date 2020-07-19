@@ -21,7 +21,6 @@
       ((_ <name>)
        #`(define-initial <name> void in env.global)))))
 
-
 (define-syntax define-primitive
   (lambda (macro)
     (syntax-case macro (in)
@@ -45,20 +44,16 @@
       ((_ <primitive-name> <arity>)
        #`(define-primitive <primitive-name> <arity> in env.global)))))
 
-
 (define-syntax define-by-arity
   (lambda (macro)
-    (syntax-case macro (_)
+    (syntax-case macro ()
       ((_ <arity> <primitive-names>)
        (for-each (lambda (name)
-                   #`(define-primitive name <arity>))
-                 (syntax->datum #`,<primitive-names>))))))
+                   (display name)
+                   (newline)
+                   (define-primitive name #`<arity>))
+                 #`,<primitive-names>)))))
 
-
-
-(define-initial t #t)
-(define-initial f the-false-value)
-(define-initial nil the-null-value)
 
 (define-initial t #t)
 (define-initial f the-false-value)
@@ -134,41 +129,50 @@
 (define-primitive cddddr 1)
 
 ;; msic. primitives
-(define-primitive error 2)
-(define-primitive exit 0)
+(define-primitive basic:error 2)
 
 (define basic:eval
   (lambda (expr env)
     (if (atom? expr)
-        (cond 
-         [(symbol? expr)
-          (let ((value (lookup-env expr env)))
-            (if value
-                value
-                (error "No bound value for " expr)))]
-         [(or (number? expr) (string? expr) (char? expr) (boolean? expr) (vector? expr) (procedure? expr))
-          expr]
-         [(eq? expr the-null-value)
-          '()]
-         [else (error "EVAL - cannot evaluate atom" expr)])
+        (cond ((symbol? expr)
+               (let ((value (lookup-env expr env)))
+                 (if value
+                     value
+                     (basic:error "No bound value for" expr))))
+              ((or (number? expr) (string? expr) (char? expr) (boolean? expr) (vector? expr))
+               expr)
+              ((eq? expr the-null-value)
+               '())
+              (else (basic:error "EVAL - cannot evaluate atom")))
         (case (car expr)
-          [(quote) (cadr expr)]
-          [(if) (if (basic:eval (cadr expr) env)
+          ((quote) (cadr expr))
+          ((if) (if (basic:eval (cadr expr) env)
                     (basic:eval (caddr expr) env)
-                    (basic:eval (cadddr expr) env))]
-          [(begin) (eprogn (cdr expr) env)]
-          [(set!) (update-env! (cadr expr) env (basic:eval (caddr expr) env))]
-          [(lambda) (make-function (cadr expr) (cddr expr) env)]
-          [else 
-           (basic:apply (basic:eval (car expr) env)
-                             (evlis (cdr expr) env))]))))
+                    (basic:eval (cadddr expr) env)))
+          ((begin) (eprogn (cdr expr) env))
+          ((set!) (update-env! (cadr expr) env (basic:eval (caddr expr) env)))
+          ((lambda) (make-function (cadr expr) (cddr expr) env))
+          ((define)         
+           (cond
+            ((symbol? cadr)
+             (if (lookup-env (cadr expr) env)
+                 (update-env! (cadr expr) env (basic:eval (caddr expr) env))
+                 (basic:error "EVAL - symbol already defined in current environment"))
+            ((list? cadr)
+             (if (eq? (caddr expr) 'lambda)
 
+                 (update-env! env.global (make-function (cadr expr) (cddr expr) env)))
+             (else(basic:eval (caddr expr) env)))
+                 
+                 (basic:error "EVAL - Not a valid procedure definition" expr)))))
+          (else (invoke (basic:eval (car expr) env)
+                        (evlis (cdr expr) env)))))))
 
-(define basic:apply
+(define invoke
   (lambda (fn args)
     (if (procedure? fn)
         (fn args)
-        (error "not a function: " fn))))
+        (basic:error "not a function:" fn))))
 
 (define make-function
   (lambda (variables body env)
@@ -181,7 +185,6 @@
   (lambda (expr)
     (not (pair? expr))))
 
-
 (define eprogn
   (lambda (exprs env)
     (if (pair? exprs)
@@ -192,7 +195,6 @@
             (basic:eval (car exprs) env))
         void)))
 
-
 (define evlis
   (lambda (exprs env)
     (if (pair? exprs)
@@ -200,16 +202,13 @@
               (evlis (cdr exprs) env))
         '())))
 
-
 (define hash
   (lambda (key)        ;; stub for possible future need
     key))
 
-
 (define valid?
   (lambda (value)
     (not (null? value))))
-
 
 (define match
   (lambda (entry key)
@@ -217,21 +216,34 @@
         (cdr entry)
         #f)))
 
-
 (define lookup-env
   (lambda (key env)
     (if (symbol? key)
-        (cond
-         [(null? env)
-          (error "LOOKUP - unbound variable " key)
-          '()]
-         [(pair? env)
-          (if (eq? (caar env) key)
-              (cdar env)
-              (lookup-env key (cdr env)))]
-         [else (error "LOOKUP - malformed environment" env)])
-        (error "LOOKUP - malformed key" key))))
-
+        (if (pair? env)
+            (let lookup-loop
+                ((entry (car env))
+                 (entries (cdr env)))
+              (cond
+               ((null? entry) #f)
+               ((pair? entry)
+                (let ((key-candidate (car entry))
+                      (value-candidate (cdr entry)))
+                  (cond
+                   ((eq? key key-candidate) value-candidate)
+                   ((pair? key-candidate)
+                    (let ((result-candidate
+                           (lookup-loop (car key-candidate) (cdr key-candidate))))
+                      (if result-candidate
+                          result-candidate
+                          (lookup-loop (car entries) (cdr entries)))
+                      (if (pair? entries)
+                          (lookup-loop (car entries) (cdr entries))
+                          #f)))
+                   ((pair? entries) (lookup-loop (car entries) (cdr entries)))
+                   (else #f))))
+               (else #f)))
+            (basic:error "LOOKUP - malformed environment" env))
+        (basic:error "LOOKUP - malformed key" key))))
 
 (define update-env!
   (lambda (key env value)
@@ -241,28 +253,33 @@
             (set-cdr! variable value)
             void)))))
 
-
 (define extend-env
   (lambda (env variables values)
-    (cond [(pair? variables)
+    (cond ((pair? variables)
            (if (pair? values)
                (cons (cons (car variables) (car values))
                      (extend-env env (cdr variables) (cdr values)))
-               (error "Too few values" values))]
+               (basic:error "Too few values")))
           ((null? variables)
            (if (null? values)
                env
-               (error "Too few variables" variables)))
+               (basic:error "Too few variables")))
           ((symbol? variables)
            (cons (cons variables values) env))
-          (else (error "EXTEND - variable key must be a symbol" variables)))))
+          (else (basic:error "EXTEND - variable key must be a symbol")))))
+
+
+; temproary definition aliasing the standard error procedure
+(define basic:error error)
 
 
 ;;; simple REPL
+
 (define basic:repl
   (lambda ()
     (display "Basic evaluator test REPL")
     (let loop ((env env.global))
+      (display #\newline)
       (display #\newline)
       (display ">>> ")
       (let ((result (basic:eval (read) env)))

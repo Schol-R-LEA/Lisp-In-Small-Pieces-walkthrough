@@ -5,12 +5,11 @@
 (define the-false-value '**false**)
 (define the-null-value '**null**)
 
-
 (define-syntax define-initial
   (lambda (macro)
     (syntax-case macro (in)
       ((_ <name> <value> in <env>)
-       (identifier? #'<name>) 
+       (identifier? #'<name>)
        #`(begin
            (set! <env> (cons (cons '<name> <value>) <env>))
            '<name>))
@@ -20,7 +19,6 @@
        #`(define-initial <name> void in <env>))
       ((_ <name>)
        #`(define-initial <name> void in env.global)))))
-
 
 (define-syntax define-primitive
   (lambda (macro)
@@ -39,10 +37,17 @@
       ((_ <name> <primitive> <arity>)
        #`(define-primitive <name> <primitive> <arity> in env.global))
       ((_ <primitive-name> <arity> in <env>)
-         #`(define-primitive <primitive-name> <primitive-name> <arity> in <env>))
+       #`(define-primitive <primitive-name> <primitive-name> <arity> in <env>))
       ((_ <primitive-name> <arity>)
-         #`(define-primitive <primitive-name> <arity> in env.global)))))
-  
+       #`(define-primitive <primitive-name> <arity> in env.global)))))
+
+(define-syntax define-by-arity
+  (lambda (macro)
+    (syntax-case macro ()
+      ((_ <arity> <primitive-names> ...)
+       (for-each (lambda (name)
+                   #`(define-primitive name <arity>))
+                 <primitive-names>)))))
 
 (define-initial t #t)
 (define-initial f the-false-value)
@@ -72,8 +77,6 @@
 (define-primitive not 1)
                                         ;(define-primitive and 2)
                                         ;(define-primitive or 2)
-
-
 
 ;; basic predicates
 (define-primitive null? 1)
@@ -122,7 +125,6 @@
 ;; msic. primitives
 (define-primitive error 2)
 
-
 (define basic:eval
   (lambda (expr env)
     (if (atom? expr)
@@ -148,7 +150,7 @@
                         (evlis (cdr expr) env)))))))
 
 (define invoke
-  (lambda (fn args) 
+  (lambda (fn args)
     (if (procedure? fn)
         (fn args)
         (error "not a function:" fn))))
@@ -164,7 +166,6 @@
   (lambda (expr)
     (not (pair? expr))))
 
-
 (define eprogn
   (lambda (exprs env)
     (if (pair? exprs)
@@ -175,7 +176,6 @@
             (basic:eval (car exprs) env))
         void)))
 
-
 (define evlis
   (lambda (exprs env)
     (if (pair? exprs)
@@ -183,16 +183,13 @@
               (evlis (cdr exprs) env))
         '())))
 
-
 (define hash
   (lambda (key)        ;; stub for possible future need
     key))
 
-
 (define valid?
   (lambda (value)
     (not (null? value))))
-
 
 (define match
   (lambda (entry key)
@@ -200,20 +197,19 @@
         (cdr entry)
         #f)))
 
-
 (define lookup-env
   (lambda (key env)
     (if (symbol? key)
         (if (pair? env)
-            (let lookup-loop 
+            (let lookup-loop
                 ((entry (car env))
                  (entries (cdr env)))
-              (cond 
+              (cond
                ((null? entry) #f)
                ((pair? entry)
                 (let ((key-candidate (car entry))
                       (value-candidate (cdr entry)))
-                  (cond 
+                  (cond
                    ((eq? key key-candidate) value-candidate)
                    ((pair? key-candidate)
                     (let ((result-candidate
@@ -254,7 +250,6 @@
           (else (error "EXTEND - variable key must be a symbol")))))
 
 ;;; simple REPL
-
 
 (define basic:repl
   (lambda ()
