@@ -28,15 +28,20 @@
       ((_ <name> <primitive> <arity> in <env>)
        #`(define-initial <name>
            (lambda (values)
-             (if (= <arity> (length values))
-                 (apply <primitive> values)
-                 (begin 
-                   (display "PROCEDURE-APPLICATION: Incorrect arity for fn")
-                   (display <name>)
-                   (display ": expect ")
-                   (display <arity>)
-                   (display ", got ")
-                   (display (length values)))))
+             (let* ((min-arity (abs <arity>))
+                    (variadic (> 0 <arity>))
+                    (comparison (if variadic <= =)))
+               (if (comparison min-arity (length values))
+                   (apply <primitive> values)
+                   (begin 
+                     (display "PROCEDURE-APPLICATION: Incorrect arity for fn ")
+                     (display <name>)
+                     (display ": expected ")
+                     (display min-arity)
+                     (if variadic 
+                         (display '+'))
+                     (display ", got ")
+                     (display (length values))))))
            in <env>))
       ((_ <name> <primitive> <arity>)
        #`(define-primitive <name> <primitive> <arity> in env.global))
@@ -58,11 +63,34 @@
 
 
 (define-primitives-by-arity 0 exit)
-(define-primitives-by-arity 1 
-  null? procedure? pair? number? integer? symbol?
-          car cdr)
 
-(define-primitives-by-arity 2  + - * / cons)
+(define-primitives-by-arity 1 
+  null? procedure? pair? number? symbol? vector? char?
+  positive? negative?
+  integer? real? complex? rational? exact? inexact? exact-integer?
+  exact->inexact inexact->exact
+  real-part imag-part numerator denominator
+  not negate abs
+  exact-integer-sqrt
+  car cdr
+  caar cadr cddr cdar 
+  caaar caadr caddr cadar cddar cdddr cdadr cdaar 
+  caaaar caaadr caaddr caadar caddar cadddr cadadr cadaar  
+  cddaar cdaaar cdaadr cdaddr cdadar cdddar cddddr cddadr 
+  )
+
+(define-primitives-by-arity 2  
+  / 
+  cons
+  eq? eqv? equal? 
+  = < <= >= >
+  string=? string<? string<=? string>=? string>?
+  string-ci=?  string-ci<? string-ci<=? string-ci>=? string-ci>?
+  char=? char<? char<=? char>=? char>? 
+  char-ci=? char-ci<? char-ci<=? char-ci>=? char-ci>? 
+  )
+
+(define-primitives-by-arity -1 + -)
 
 
 (define basic:eval
@@ -89,7 +117,7 @@
           [(lambda) (make-function (cadr expr) (cddr expr) env)]
           [else 
            (basic:apply (basic:eval (car expr) env)
-                             (evlis (cdr expr) env))]))))
+                        (evlis (cdr expr) env))]))))
 
 
 (define basic:apply
