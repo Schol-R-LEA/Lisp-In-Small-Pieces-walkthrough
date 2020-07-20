@@ -46,96 +46,24 @@
        #`(define-primitive <primitive-name> <arity> in env.global)))))
 
 
-(define-syntax define-by-arity
-  (lambda (macro)
-    (syntax-case macro (_)
-      ((_ <arity> <primitive-names>)
-       (for-each (lambda (name)
-                   #`(define-primitive name <arity>))
-                 (syntax->datum #`,<primitive-names>))))))
-
+(define-syntax-rule (define-primitives-by-arity arity primitives ...)
+  (begin
+    (define-primitive primitives arity)
+    ...))
 
 
 (define-initial t #t)
 (define-initial f the-false-value)
 (define-initial nil the-null-value)
 
-(define-initial t #t)
-(define-initial f the-false-value)
-(define-initial nil the-null-value)
 
-;; list creation primitives
-(define-primitive cons 2)
-(define-primitive set-car! 2)
-(define-primitive set-cdr! 2)
-(define-primitive list 2)
+(define-primitives-by-arity 0 exit)
+(define-primitives-by-arity 1 
+  null? procedure? pair? number? integer? symbol?
+          car cdr)
 
-;; basic math
-(define-primitive + 2)
-(define-primitive - 2)
-(define-primitive * 2)
-(define-primitive / 2)
+(define-primitives-by-arity 2  + - * / cons)
 
-;; basic comparisons
-(define-primitive eq? 2)
-(define-primitive eqv? 2)
-(define-primitive equal? 2)
-(define-primitive = 2)
-(define-primitive < 2)
-(define-primitive <= 2)
-(define-primitive > 2)
-(define-primitive >= 2)
-(define-primitive not 1)
-                                        ;(define-primitive and 2)
-                                        ;(define-primitive or 2)
-
-;; basic predicates
-(define-primitive null? 1)
-(define-primitive symbol? 1)
-(define-primitive list? 1)
-(define-primitive number? 1)
-(define-primitive string? 1)
-(define-primitive char? 1)
-(define-primitive vector? 1)
-(define-primitive boolean? 1)
-(define-primitive procedure? 1)
-
-;; list extractors
-(define-primitive car 1)
-(define-primitive cdr 1)
-(define-primitive caar 1)
-(define-primitive cadr 1)
-(define-primitive cdar 1)
-(define-primitive cddr 1)
-(define-primitive caaar 1)
-(define-primitive caadr 1)
-(define-primitive cadar 1)
-(define-primitive cdaar 1)
-(define-primitive caddr 1)
-(define-primitive cdadr 1)
-(define-primitive cddar 1)
-(define-primitive cdddr 1)
-
-(define-primitive caaaar 1)
-(define-primitive caaadr 1)
-(define-primitive caadar 1)
-(define-primitive cadaar 1)
-(define-primitive caaddr 1)
-(define-primitive cadadr 1)
-(define-primitive caddar 1)
-(define-primitive cadddr 1)
-(define-primitive cdaaar 1)
-(define-primitive cdaadr 1)
-(define-primitive cdadar 1)
-(define-primitive cddaar 1)
-(define-primitive cdaddr 1)
-(define-primitive cddadr 1)
-(define-primitive cdddar 1)
-(define-primitive cddddr 1)
-
-;; msic. primitives
-(define-primitive error 2)
-(define-primitive exit 0)
 
 (define basic:eval
   (lambda (expr env)
