@@ -24,27 +24,31 @@
 
 (define-syntax define-primitive
   (lambda (macro)
-    (syntax-case macro (in)
-      ((_ <name> <primitive> <arity> in <env>)
+    (syntax-case macro (in is-variadic?)
+      ((_ <name> <primitive> <arity> is-variadic? <variadic> in <env>)
        #`(define-initial <name>
            (lambda (values)
-             (let* ((min-arity (abs <arity>))
-                    (variadic (> 0 <arity>))
-                    (comparison (if variadic <= =)))
-               (if (comparison min-arity (length values))
+             (let((comparison (if <variadic> <= =)))
+               (if (comparison <arity> (length values))
                    (apply <primitive> values)
                    (begin 
                      (display "PROCEDURE-APPLICATION: Incorrect arity for fn ")
                      (display <name>)
                      (display ": expected ")
-                     (display min-arity)
-                     (if variadic 
+                     (display <arity>)
+                     (if <variadic> 
                          (display '+'))
                      (display ", got ")
                      (display (length values))))))
            in <env>))
-      ((_ <name> <primitive> <arity>)
-       #`(define-primitive <name> <primitive> <arity> in env.global))
+      ((_ <name> <primitive> <arity> in <env>)
+       #`(define-primitive <name> <primitive> <arity> is-variadic? #f in <env>))
+      ((_ <name> <primitive> <arity> is-variadic? <variadic>)
+       #`(define-primitive <name> <primitive> <arity> is-variadic? <variadic> in env.global))
+      ((_ <primitive-name> <arity> is-variadic? <variadic> in <env>)
+       #`(define-primitive <primitive-name> <primitive-name> <arity> is-variadic? <variadic> in <env>))
+      ((_ <primitive-name> <arity> is-variadic? <variadic>)
+       #`(define-primitive <primitive-name> <arity>  is-variadic? <variadic> in env.global))
       ((_ <primitive-name> <arity> in <env>)
        #`(define-primitive <primitive-name> <primitive-name> <arity> in <env>))
       ((_ <primitive-name> <arity>)
@@ -60,7 +64,6 @@
 (define-initial t #t)
 (define-initial f the-false-value)
 (define-initial nil the-null-value)
-
 
 (define-primitives-by-arity 0 exit)
 
@@ -79,8 +82,7 @@
   cddaar cdaaar cdaadr cdaddr cdadar cdddar cddddr cddadr 
   )
 
-(define-primitives-by-arity 2  
-  / 
+(define-primitives-by-arity 
   cons
   eq? eqv? equal? 
   = < <= >= >
@@ -90,7 +92,15 @@
   char-ci=? char-ci<? char-ci<=? char-ci>=? char-ci>? 
   )
 
-(define-primitives-by-arity -1 + -)
+(define-primitive display 1 is-variadic? #t)
+(define-primitive error 1 is-variadic? #t)
+(define-primitive read 0 is-variadic? #t)
+
+(define-primitive + 1 is-variadic? #t)
+(define-primitive - 1 is-variadic? #t)
+
+(define-primitive * 2 is-variadic? #t)
+(define-primitive / 2 is-variadic? #t)
 
 
 (define basic:eval
@@ -112,9 +122,21 @@
           [(if) (if (basic:eval (cadr expr) env)
                     (basic:eval (caddr expr) env)
                     (basic:eval (cadddr expr) env))]
+          [(or) (if (basic:eval (cadr expr) env)
+                    #t
+                    (if (basic:eval (caddr expr) env)
+                        #t
+                        #f))]
+          [(and) (if (basic:eval (cadr expr) env)
+                     (if (basic:eval (caddr expr) env)
+                         #t
+                         #f)
+                     #f)]
           [(begin) (eprogn (cdr expr) env)]
           [(set!) (update-env! (cadr expr) env (basic:eval (caddr expr) env))]
           [(lambda) (make-function (cadr expr) (cddr expr) env)]
+          [(eval) (basic:eval (car expr) (cadr expr))]
+          [(apply) (basic:apply (car expr) (cadr expr))]
           [else 
            (basic:apply (basic:eval (car expr) env)
                         (evlis (cdr expr) env))]))))
