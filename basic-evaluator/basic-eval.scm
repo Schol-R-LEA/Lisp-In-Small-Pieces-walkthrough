@@ -4,7 +4,7 @@
 (define parent-env '**parent**)
 (define the-false-value '**false**)
 (define the-null-value '**null**)
-
+(define trace #f)
 
 (define-syntax define-initial
   (lambda (macro)
@@ -119,6 +119,7 @@
          [else (error "EVAL - cannot evaluate atom" expr)])
         (case (car expr)
           [(quote) (cadr expr)]
+          [(unquote) (basic:eval (cadr expr) env)]
           [(if) (if (basic:eval (cadr expr) env)
                     (basic:eval (caddr expr) env)
                     (basic:eval (cadddr expr) env))]
