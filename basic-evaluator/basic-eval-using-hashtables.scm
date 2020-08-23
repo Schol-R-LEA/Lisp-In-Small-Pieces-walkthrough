@@ -1,14 +1,18 @@
+(use-modules 
+ (srfi srfi-1)
+ (srfi srfi-69) 
+ (srfi srfi-89)
+ (srfi srfi-90)
+)
+
+
 (define void '*unspecified*)
 (define env.init  '())
 (define env.global env.init)
 (define parent-env '**parent**)
-(define the-true-value '**true**)
 (define the-false-value '**false**)
 (define the-null-value '**null**)
 (define trace #f)
-(define restore-repl '())
-(define indent-amount 1)
-
 
 (define-syntax define-initial
   (lambda (macro)
@@ -83,7 +87,8 @@
   caar cadr cddr cdar 
   caaar caadr caddr cadar cddar cdddr cdadr cdaar 
   caaaar caaadr caaddr caadar caddar cadddr cadadr cadaar  
-  cddaar cdaaar cdaadr cdaddr cdadar cdddar cddddr cddadr)
+  cddaar cdaaar cdaadr cdaddr cdadar cdddar cddddr cddadr 
+  )
 
 (define-primitives-by-arity 2
   cons
@@ -92,7 +97,8 @@
   string=? string<? string<=? string>=? string>?
   string-ci=?  string-ci<? string-ci<=? string-ci>=? string-ci>?
   char=? char<? char<=? char>=? char>? 
-  char-ci=? char-ci<? char-ci<=? char-ci>=? char-ci>?)
+  char-ci=? char-ci<? char-ci<=? char-ci>=? char-ci>? 
+  )
 
 (define-primitive display 1 is-variadic? #t)
 (define-primitive error 1 is-variadic? #t)
@@ -108,38 +114,18 @@
 (define basic:eval
   (lambda (expr env)
     (if (atom? expr)
-        (cond
-         [(eq? expr #t) the-true-value]
-         [(eq? expr #f) the-false-value]
+        (cond 
          [(symbol? expr)
           (let ((value (lookup-env expr env)))
             (if value
-                (begin
-                  (if trace 
-                      (begin
-                        (indent)
-                        (display expr)
-                        (display " == ")
-                        (display value)
-                        (newline)))
-                  value)
+                value
                 (error "EVAL - No bound value for" expr)))]
          [(or (number? expr) (string? expr) (char? expr) (boolean? expr) (vector? expr) (procedure? expr))
-          (if trace 
-              (begin
-                (indent)
-                (display expr)
-                (newline)))
           expr]
          [(eq? expr the-null-value)
           '()]
          [else (error "EVAL - cannot evaluate atom" expr)])
         (case (car expr)
-          [(trace) 
-           (set! trace (case (cadr expr) 
-                         [(on) #t]
-                         [(off) #f]
-                         [else (error "EVAL - not a valid tracing option" (cadr expr))]))]
           [(quote) (cadr expr)]
           [(unquote) (basic:eval (cadr expr) env)]
           [(if) (if (basic:eval (cadr expr) env)
@@ -158,43 +144,28 @@
           [(begin) (eprogn (cdr expr) env)]
           [(set!) (update-env! (cadr expr) env (basic:eval (caddr expr) env))]
           [(lambda) (make-function (cadr expr) (cddr expr) env)]
-          [(define)
+          ((define)
            (let ((signature (cadr expr))
                  (value (caddr expr)))
+             (display "Symbol ")
+             (display signature)
+             (display " defined as ")
+             (display (basic:eval value env.global))
+             (display  " in expression ")
+             (display expr)
+             (newline)
              (cond 
               [(null? signature)
                (error "DEFINE - no symbol to define: " expr)]
               [(atom? signature)
-               (set! env.global (extend-env env.global signature (basic:eval value env)))
-               signature]
+               (update-env! signature env.global (basic:eval value env))]
               [(pair? signature)
-               (set! env.global (extend-env env.global (car signature) (make-function (cdr signature) value env)))
-               (car signature)]))]
-          [(get-environment) env]
-          [(eval) 
-           (if trace
-               (begin 
-                 (indent)
-                 (display (car expr))
-                 (newline)
-                 (set! indent-amount (+ indent-amount 1))))
-           (let  ((result (basic:eval (car expr) (cadr expr))))
-             (if trace 
-                 (set! indent-amount (- indent-amount 1)))
-             result)]
+               (update-env! (car signature)
+                            env.global
+                            (make-function (cdr signature) value env))])))
+          [(eval) (basic:eval (car expr) (cadr expr))]
           [(apply) (basic:apply (car expr) (cadr expr))]
           [else 
-           (if trace
-               (begin 
-                 (set! indent-amount (+ indent-amount 1))
-                 (indent)
-                 (display "(")
-                 (display (car expr))
-                 (display " ")
-                 (display (cdr expr))
-                 (display ")")               
-                 (newline)
-                 (set! indent-amount (- indent-amount 1))))
            (basic:apply (basic:eval (car expr) env)
                         (evlis (cdr expr) env))]))))
 
@@ -205,12 +176,10 @@
         (fn args)
         (error "APPLY - not a function:" fn))))
 
-
 (define make-function
   (lambda (variables body env)
     (lambda (values)
       (eprogn body (extend-env env variables values)))))
-
 
 ;;; utility functions
 
@@ -262,18 +231,16 @@
             (if (eq? (caar env) key)
                 (cdar env)
                 (lookup-env key (cdr env)))
-            (error "LOOKUP-ENV - unbound" key))
-        (error "LOOKUP-ENV - malformed key" key))))
+           '())
+        (error "LOOKUP - malformed key" key))))
 
 
-(define (update-env! key env value)
-  (if (pair? env)
-      (if (eq? (caar env) key)
-          (begin
-            (set-cdr! (car env) value)
-            value)
-          (update-env! key (cdr env) value))
-      (error "UPDATE-ENV! - Empty environment.")))
+(define-syntax-rule (update-env! key env value)
+  (let ((variable (lookup-env key env)))
+    (if (valid? variable)
+        (set-cdr! variable value)
+        (set! env (extend-env env key value)))
+    void))
 
 
 (define extend-env
@@ -282,23 +249,14 @@
            (if (pair? values)
                (cons (cons (car variables) (car values))
                      (extend-env env (cdr variables) (cdr values)))
-               (error "EXTEND-ENV - Too few values" values))]
+               (error "EXTEND - Too few values" values))]
           [(null? variables)
            (if (null? values)
                env
-               (error "EXTEND-ENV - Too few variables" variables))]
+               (error "EXTEND - Too few variables" variables))]
           [(symbol? variables)
            (cons (cons variables values) env)]
-          (else (error "EXTEND-ENV - variable key must be a symbol" variables)))))
-
-
-(define indent
-  (lambda ()
-    (let loop ((indent-amt indent-amount))
-      (if (> indent-amt 0)
-          (begin 
-            (display #\tab)
-            (loop (- indent-amt 1)))))))
+          (else (error "EXTEND - variable key must be a symbol" variables)))))
 
 
 ;;; simple REPL
@@ -311,6 +269,6 @@
       (let ((result (basic:eval (read) env)))
         (if (not (eqv? result void)) 
             (display result))
-        (loop env.global)))))
+        (loop env)))))
 
 (basic:repl)
