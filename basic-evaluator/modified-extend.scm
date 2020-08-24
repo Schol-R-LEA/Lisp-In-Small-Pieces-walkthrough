@@ -116,9 +116,22 @@
          [(symbol? expr)
           (let ((value (lookup-env expr env)))
             (if value
-                value
+                (begin
+                  (if trace 
+                      (begin
+                        (indent)
+                        (display expr)
+                        (display " == ")
+                        (display value)
+                        (newline)))
+                  value)
                 (error "EVAL - No bound value for" expr)))]
          [(or (number? expr) (string? expr) (char? expr) (boolean? expr) (vector? expr) (procedure? expr))
+          (if trace 
+              (begin
+                (indent)
+                (display expr)
+                (newline)))
           expr]
          [(eq? expr the-null-value)
           '()]
@@ -183,16 +196,9 @@
                  (display (cdr expr))
                  (display ")")               
                  (newline)
-           (let ((result (basic:apply (basic:eval (car expr) env)
-                                       (evlis (cdr expr) env))))
-             (if trace
-                 (begin 
-                   (indent)
-                   (display " -> ")
-                   (display result)
-                   (newline)
-                   (set! indent-amount (- indent-amount 1))))
-             result)))]))))
+                 (set! indent-amount (- indent-amount 1))))
+           (basic:apply (basic:eval (car expr) env)
+                        (evlis (cdr expr) env))]))))
 
 
 (define basic:apply
@@ -276,18 +282,7 @@
 
 (define extend-env
   (lambda (env variables values)
-    (cond [(pair? variables)
-           (if (pair? values)
-               (cons (cons (car variables) (car values))
-                     (extend-env env (cdr variables) (cdr values)))
-               (error "EXTEND-ENV - Too few values" values))]
-          [(null? variables)
-           (if (null? values)
-               env
-               (error "EXTEND-ENV - Too few variables" variables))]
-          [(symbol? variables)
-           (cons (cons variables values) env)]
-          (else (error "EXTEND-ENV - variable key must be a symbol" variables)))))
+    (cons (cons variables value) env)))
 
 
 (define indent
