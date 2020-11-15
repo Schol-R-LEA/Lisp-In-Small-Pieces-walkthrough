@@ -107,6 +107,17 @@
 (define-primitive list 2 is-variadic? #t)
 
 
+(define-primitive call/cc 
+  (lambda (f)
+    (call/cc (lambda (g)
+               (basic:apply 
+                f 
+                (list (lambda (values)
+                        (if (= (length values) 1)
+                            (g (car values))
+                            (error "Wrong arity" g)))))))))
+
+
 (define basic:eval
   (lambda (expr env)
     (if (atom? expr)
@@ -182,9 +193,9 @@
                  (display " ")
                  (display (cdr expr))
                  (display ")")               
-                 (newline)
+                 (newline)))
            (let ((result (basic:apply (basic:eval (car expr) env)
-                                       (evlis (cdr expr) env))))
+                                      (evlis (cdr expr) env))))
              (if trace
                  (begin 
                    (indent)
@@ -192,7 +203,7 @@
                    (display result)
                    (newline)
                    (set! indent-amount (- indent-amount 1))))
-             result)))]))))
+             result)]))))
 
 
 (define basic:apply
@@ -302,13 +313,18 @@
 ;;; simple REPL
 (define basic:repl
   (lambda ()
-    (display "Basic evaluator test REPL")
-    (let loop ((env env.global))      
-      (newline)
-      (display ">>> ")
-      (let ((result (basic:eval (read) env)))
-        (if (not (eqv? result void)) 
-            (display result))
-        (loop env.global)))))
+    (letrec ((repl 
+              (lambda (env)
+                (newline)
+                (display ">>> ")
+                (let ((result (basic:eval (read) env)))
+                  (if (not (eqv? result void))
+                      (display result)))
+                (repl env.global))))
+      (display "Basic evaluator test REPL")
+      (call/cc 
+       (lambda (exit)
+         (define-primitive exit 0)
+         (repl env.global))))))
 
 (basic:repl)
